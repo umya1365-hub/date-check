@@ -4,20 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Date Code Checker</title>
-
-<!-- ✅ PWA Setup -->
 <meta name="theme-color" content="#1a73e8">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Date Checker">
 <meta name="mobile-web-app-capable" content="yes">
-
-<!-- ✅ Custom App Icon (Calendar emoji) -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231a73e8'/%3E%3Ctext y='75' font-size='70' text-anchor='middle' x='50'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231a73e8'/%3E%3Ctext y='75' font-size='70' text-anchor='middle' x='50'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E">
-
-<!-- ✅ Web App Manifest -->
-<link rel="manifest" href='data:application/manifest+json,{"name":"MMDD Date Code Checker","short_name":"Date Checker","start_url":".","display":"standalone","background_color":"%231a73e8","theme_color":"%231a73e8","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2718%27 fill=%27%231a73e8%27/%3E%3Ctext y=%2775%27 font-size=%2770%27 text-anchor=%27middle%27 x=%2750%27%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}'>
+<meta name="apple-mobile-web-app-title" content="Date Checker">
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -164,7 +154,7 @@ const MODEL = "gemini-2.5-flash";
 // =====================
 
 let productList = [];
-let allowedCodes = ["A","B","C","D","E","F","G","H","I"];
+let allowedCodes = ["A","B","C","D","E","F","G","H","I","X","P"];
 let lastComposite = null;
 
 function showDebug(msg) {
@@ -522,7 +512,7 @@ document.getElementById("shareBtn").addEventListener("click", async () => {
   const file = new File([lastComposite], "datecheck.jpg", { type: "image/jpeg" });
   const text = document.getElementById("resultDetail").innerText;
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (navigator.canShare && navigator.share) {
       await navigator.share({ files: [file], title: "Date Code Check", text: text });
     } else {
       await navigator.share({ text: text });
