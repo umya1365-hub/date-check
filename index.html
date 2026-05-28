@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MMDD Date Code Checker</title>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  padding: 15px;
+  max-width: 500px;
+  margin: 0 auto;
+  color: #222;
+}
+h1 {
+  text-align: center;
+  font-size: 22px;
+  margin-bottom: 15px;
+  color: #1a73e8;
+}
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+select, input[type=file], button {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+}
+button {
+  background: #1a73e8;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+#preview {
+  width: 100%;
+  border-radius: 8px;
+  display: none;
+  margin-top: 10px;
+}
+#status {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  margin-top: 10px;
+  word-wrap: break-word;
+}
+#debugBox {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-top: 10px;
+  display: none;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+.result-box {
+  margin-top: 10px;
+  padding: 15px;
+  border-radius: 10px;
+  display: none;
+}
+.result-box.pass { background: #d4edda; border: 2px solid #28a745; }
+.result-box.fail { background: #f8d7da; border: 2px solid #dc3545; }
+.result-status {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.pass .result-status { color: #155724; }
+.fail .result-status { color: #721c24; }
+.mode-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 8px;
+  background: #1a73e8;
+  color: white;
+}
+.detail {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.detail b { display: inline-block; width: 90px; }
+#shareBtn { background: #25D366; display: none; margin-top: 10px; }
+#canvasHidden { display: none; }
+</style>
+</head>
+
+<body>
+
+<h1>📅 MMDD Date Code Checker</h1>
+
+<div class="card">
+  <label>Select Product</label>
+  <select id="productSelect">
+    <option value="">⏳ Loading products...</option>
+  </select>
+
+  <label>Code Type</label>
+  <select id="codeTypeSelect">
+    <option value="WITH">With Code</option>
+    <option value="NO">No Code</option>
+  </select>
+
+  <label>📷 Take Photo of Date Code</label>
+  <input type="file" accept="image/*" capture="environment" id="camera">
+
+  <img id="preview">
+  <div id="status"></div>
+  <div id="debugBox"></div>
+</div>
+
+<div id="resultBox" class="result-box">
+  <div class="result-status" id="resultStatus"></div>
+  <div class="detail" id="resultDetail"></div>
+</div>
+
+<button id="shareBtn">📤 Share to Viber</button>
+
+<canvas id="canvasHidden"></canvas>
+
+<script>
+// ====== CONFIG ======
+const SHEET_ID = "1lWJFf1wbrSXygvjqmmtu1qVbwCkxhjsnv_JBiOTWaYk";
+const API_KEY = "AIzaSyB00RQ0kHrSYz4rmaphWvAhNveGN2la3Y8";  // ⚠️ Replace with your Gemini API key
+const MODEL = "gemini-2.5-flash";
+// =====================
+
+let productList = [];
+let allowedCodes = ["A","B","C","D","E","F","G","H","I"];
+let lastComposite = null;
+
+function showDebug(msg) {
+  const d = document.getElementById("debugBox");
+  d.style.display = "block";
+  d.innerText = msg;
+}
+
+window.addEventListener("load", () => {
+  if (API_KEY === "AIzaSyB00RQ0kHrSYz4rmaphWvAhNveGN2la3Y8" || API_KEY.length < 20) {
+    showDebug("⚠️ API Key မထည့်ရသေး!");
+  }
+});
+
+async function loadConfig() {
+  try {
+    const pUrl = `https://opensheet.elk.sh/${SHEET_ID}/Products`;
+    const pRes = await fetch(pUrl);
+    const pData = await pRes.json();
+    productList = pData.filter(r => r.Active === "YES");
+    const select = document.getElementById("productSelect");
+    select.innerHTML = '<option value="">-- Select Product --</option>';
+    productList.forEach((row, i) => {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = row["Product Name"];
+      select.appendChild(opt);
+    });
+
+    const sUrl = `https://opensheet.elk.sh/${SHEET_ID}/Settings`;
+    const sRes = await fetch(sUrl);
+    const sData = await sRes.json();
+    const codeRangeRow = sData.find(r => r.Setting === "Machine Code Range");
+    const range = codeRangeRow ? codeRangeRow.Value : "A-I";
+    allowedCodes = parseCodeRange(range);
+  } catch (e) {
+    document.getElementById("productSelect").innerHTML =
+      '<option>❌ Load failed - check internet</option>';
+  }
+}
+loadConfig();
+
+function parseCodeRange(range) {
+  const codes = [];
+  range.split(",").forEach(part => {
+    part = part.trim();
+    if (part.includes("-")) {
+      const [start, end] = part.split("-").map(s => s.trim());
+      for (let c = start.charCodeAt(0); c <= end.charCodeAt(0); c++) {
+        codes.push(String.fromCharCode(c));
+      }
+    } else if (part.length === 1) {
+      codes.push(part.toUpperCase());
+    }
+  });
+  return codes;
+}
+
+function resizeImage(base64, maxSize = 1024) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > h && w > maxSize) { h = h * maxSize / w; w = maxSize; }
+      else if (h > maxSize) { w = w * maxSize / h; h = maxSize; }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.src = base64;
+  });
+}
+
+document.getElementById("camera").addEventListener("change", async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const productIndex = document.getElementById("productSelect").value;
+  if (productIndex === "") {
+    alert("⚠️ Please select product first");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async function() {
+    document.getElementById("preview").src = reader.result;
+    document.getElementById("preview").style.display = "block";
+    document.getElementById("status").innerText = "⏳ Processing photo... (4-6 sec)";
+    document.getElementById("debugBox").style.display = "none";
+    document.getElementById("resultBox").style.display = "none";
+    document.getElementById("shareBtn").style.display = "none";
+    const resized = await resizeImage(reader.result, 1024);
+    await processImage(resized);
+  };
+  reader.readAsDataURL(file);
+});
+
+async function processImage(base64) {
+  if (API_KEY === "PUT_YOUR_API_KEY_HERE" || API_KEY.length < 20) {
+    document.getElementById("status").innerText = "❌ API Key မထည့်ရသေး";
+    return;
+  }
+
+  try {
+    const cleanBase64 = base64.split(",")[1];
+    const prompt = `Read the date code printed on this product package.
+Return ONLY raw JSON, no markdown, no code fence:
+{"Code":"X","MFG":"DD MM YY","EXP":"DD MM YY"}
+
+Rules:
+- Code = single letter (A-Z) printed near the dates. Return null if not visible.
+- MFG = manufacturing date in DD MM YY format. IGNORE any time. Return null if not present.
+- EXP = expiry date in DD MM YY format. Return null if not present.
+- If only ONE date is printed (no MFG/EXP labels), put it in MFG field and set EXP to null.
+- If both MFG and EXP labels are clearly visible, fill both fields.
+- Separators can be space, dot, slash, dash — normalize to spaces.
+- Only extract date numbers, no time strings.`;
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: "image/jpeg", data: cleanBase64 } }
+            ]
+          }]
+        })
+      }
+    );
+
+    const data = await res.json();
+
+    if (data.error) {
+      document.getElementById("status").innerText = "❌ API Error";
+      showDebug("API Error:\n" + data.error.message);
+      return;
+    }
+    if (!data.candidates || !data.candidates[0].content) {
+      document.getElementById("status").innerText = "❌ No response";
+      showDebug(JSON.stringify(data, null, 2).slice(0, 500));
+      return;
+    }
+
+    let text = data.candidates[0].content.parts[0].text;
+    text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]+\}/);
+      if (match) result = JSON.parse(match[0]);
+      else {
+        document.getElementById("status").innerText = "❌ Cannot parse AI response";
+        showDebug("AI returned:\n" + text);
+        return;
+      }
+    }
+    validate(result);
+  } catch (e) {
+    document.getElementById("status").innerText = "❌ AI read failed";
+    showDebug("Exception: " + e.message);
+  }
+}
+
+function validate(r) {
+  const productIndex = document.getElementById("productSelect").value;
+  const product = productList[productIndex];
+  const unit = product["Shelf Life Unit"];
+  const value = parseInt(product["Shelf Life Value"]);
+  const productName = product["Product Name"];
+  const codeType = document.getElementById("codeTypeSelect").value;  // "WITH" or "NO"
+
+  const detectedCode = (r.Code || "").toString().trim().toUpperCase();
+  const mfg = parseDate(r.MFG);
+  const exp = parseDate(r.EXP);
+
+  // Auto-detect mode based on date count
+  const mode = (mfg && exp) ? "FULL" : "SINGLE";
+
+  let codeOK = "—";
+  let formatOK = "✅ OK";
+  let shelfOK = "—";
+  let pass = true;
+  let showCodeLine = false;
+
+  // ✅ Code validation (only if "With Code" selected)
+  if (codeType === "WITH") {
+    showCodeLine = true;
+    if (!detectedCode || detectedCode === "NULL") {
+      codeOK = "❌ Not detected";
+      pass = false;
+    } else if (!allowedCodes.includes(detectedCode)) {
+      codeOK = `❌ Invalid (allowed: ${allowedCodes.join(",")})`;
+      pass = false;
+    } else {
+      codeOK = "✅ OK";
+    }
+  } else {
+    // No Code mode — skip code check entirely
+    codeOK = "Skipped";
+  }
+
+  // ✅ Date validation (always)
+  if (mode === "FULL") {
+    if (!mfg) { formatOK = "❌ Invalid MFG"; pass = false; }
+    else if (!exp) { formatOK = "❌ Invalid EXP"; pass = false; }
+    else if (mfg >= exp) { formatOK = "❌ MFG ≥ EXP (Swapped!)"; pass = false; }
+
+    if (mfg && exp) {
+      const expected = addPeriod(mfg, unit, value);
+      if (exp.getTime() !== expected.getTime()) {
+        shelfOK = `❌ Expected ${formatDate(expected)}`;
+        pass = false;
+      } else {
+        shelfOK = `✅ ${value} ${unit} OK`;
+      }
+    } else {
+      shelfOK = "❌ Cannot check";
+    }
+  } else {
+    // SINGLE mode
+    if (!mfg) {
+      formatOK = "❌ Invalid date";
+      pass = false;
+    } else {
+      formatOK = "✅ Calendar valid";
+    }
+    shelfOK = "— (Single date)";
+  }
+
+  showResult({
+    mode,
+    codeType,
+    showCodeLine,
+    code: detectedCode || "?",
+    productName,
+    mfg: mfg ? formatDate(mfg) : (r.MFG || "—"),
+    exp: exp ? formatDate(exp) : "—",
+    codeOK, formatOK, shelfOK, pass
+  });
+}
+
+function addPeriod(date, unit, value) {
+  const d = new Date(date);
+  const day = d.getDate();
+  if (unit === "year") {
+    d.setDate(1);
+    d.setFullYear(d.getFullYear() + value);
+  } else if (unit === "month") {
+    d.setDate(1);
+    d.setMonth(d.getMonth() + value);
+  }
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
+function parseDate(str) {
+  if (!str) return null;
+  const parts = str.match(/\d+/g);
+  if (!parts || parts.length < 3) return null;
+  const d = parseInt(parts[0]);
+  const m = parseInt(parts[1]) - 1;
+  let y = parseInt(parts[2]);
+  if (y < 100) y += 2000;
+  const dt = new Date(y, m, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m || dt.getDate() !== d) return null;
+  return dt;
+}
+
+function formatDate(d) {
+  return String(d.getDate()).padStart(2,"0") + "-" +
+         String(d.getMonth()+1).padStart(2,"0") + "-" +
+         d.getFullYear();
+}
+
+function showResult(r) {
+  const box = document.getElementById("resultBox");
+  box.className = "result-box " + (r.pass ? "pass" : "fail");
+  box.style.display = "block";
+  document.getElementById("resultStatus").innerHTML =
+    (r.pass ? "✅ PASS" : "❌ FAIL") +
+    `<span class="mode-badge">${r.mode}</span>` +
+    `<span class="mode-badge">${r.codeType === "WITH" ? "Code" : "No Code"}</span>`;
+
+  let detailHTML = "";
+
+  if (r.showCodeLine) {
+    detailHTML += `<b>Code:</b> ${r.code} ${r.codeOK !== "✅ OK" ? "(" + r.codeOK + ")" : "✅"}<br>`;
+  }
+
+  detailHTML += `<b>Product:</b> ${r.productName}<br>`;
+
+  if (r.mode === "FULL") {
+    detailHTML += `
+      <b>MFG:</b> ${r.mfg}<br>
+      <b>EXP:</b> ${r.exp}<br>
+      <b>Format:</b> ${r.formatOK}<br>
+      <b>Shelf:</b> ${r.shelfOK}<br>
+    `;
+  } else {
+    detailHTML += `
+      <b>Date:</b> ${r.mfg}<br>
+      <b>Format:</b> ${r.formatOK}<br>
+      <b>Shelf:</b> ${r.shelfOK}<br>
+    `;
+  }
+
+  detailHTML += `<b>Checked:</b> ${formatDate(new Date())} ${new Date().toTimeString().slice(0,5)}`;
+
+  document.getElementById("resultDetail").innerHTML = detailHTML;
+  document.getElementById("status").innerText = "";
+  document.getElementById("shareBtn").style.display = "block";
+  buildComposite(r);
+}
+
+function buildComposite(r) {
+  const img = document.getElementById("preview");
+  const canvas = document.getElementById("canvasHidden");
+  const ctx = canvas.getContext("2d");
+
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const resultH = 560;
+  canvas.width = W;
+  canvas.height = H + resultH;
+
+  ctx.fillStyle = r.pass ? "#d4edda" : "#f8d7da";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, W, H);
+
+  ctx.fillStyle = r.pass ? "#155724" : "#721c24";
+  ctx.font = "bold 60px Arial";
+  ctx.textAlign = "center";
+  const tagLine = (r.pass ? "✅ PASS" : "❌ FAIL") + " [" + r.mode + " / " + (r.codeType === "WITH" ? "Code" : "No Code") + "]";
+  ctx.fillText(tagLine, W/2, H + 70);
+
+  ctx.fillStyle = "#222";
+  ctx.font = "32px Arial";
+  ctx.textAlign = "left";
+
+  const lines = [];
+  if (r.showCodeLine) lines.push("Code: " + r.code);
+  lines.push("Product: " + r.productName);
+  if (r.mode === "FULL") {
+    lines.push("MFG: " + r.mfg);
+    lines.push("EXP: " + r.exp);
+  } else {
+    lines.push("Date: " + r.mfg);
+  }
+  lines.push("Format: " + r.formatOK);
+  lines.push("Shelf: " + r.shelfOK);
+  lines.push("Checked: " + formatDate(new Date()) + " " + new Date().toTimeString().slice(0,5));
+
+  lines.forEach((line, i) => {
+    ctx.fillText(line, 30, H + 130 + i*45);
+  });
+
+  canvas.toBlob(blob => {
+    lastComposite = blob;
+    const a = document.createElement("a");
+    const fname = `DateCheck_${r.productName.replace(/[^a-z0-9]/gi,"_")}_${r.pass?"PASS":"FAIL"}_${Date.now()}.jpg`;
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+  }, "image/jpeg", 0.9);
+}
+
+document.getElementById("shareBtn").addEventListener("click", async () => {
+  if (!lastComposite) { alert("No result to share"); return; }
+  const file = new File([lastComposite], "datecheck.jpg", { type: "image/jpeg" });
+  const text = document.getElementById("resultDetail").innerText;
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Date Code Check", text: text });
+    } else {
+      await navigator.share({ text: text });
+    }
+  } catch (e) {
+    alert("Share cancelled");
+  }
+});
+</script>
+
+</body>
+</html>
