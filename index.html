@@ -3,7 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MMDD Date Code Checker</title>
+<title>Date Code Checker</title>
+
+<!-- ✅ PWA Setup -->
+<meta name="theme-color" content="#1a73e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Date Checker">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- ✅ Custom App Icon (Calendar emoji) -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231a73e8'/%3E%3Ctext y='75' font-size='70' text-anchor='middle' x='50'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231a73e8'/%3E%3Ctext y='75' font-size='70' text-anchor='middle' x='50'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E">
+
+<!-- ✅ Web App Manifest -->
+<link rel="manifest" href='data:application/manifest+json,{"name":"MMDD Date Code Checker","short_name":"Date Checker","start_url":".","display":"standalone","background_color":"%231a73e8","theme_color":"%231a73e8","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2718%27 fill=%27%231a73e8%27/%3E%3Ctext y=%2775%27 font-size=%2770%27 text-anchor=%27middle%27 x=%2750%27%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}'>
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -325,13 +339,12 @@ function validate(r) {
   const unit = product["Shelf Life Unit"];
   const value = parseInt(product["Shelf Life Value"]);
   const productName = product["Product Name"];
-  const codeType = document.getElementById("codeTypeSelect").value;  // "WITH" or "NO"
+  const codeType = document.getElementById("codeTypeSelect").value;
 
   const detectedCode = (r.Code || "").toString().trim().toUpperCase();
   const mfg = parseDate(r.MFG);
   const exp = parseDate(r.EXP);
 
-  // Auto-detect mode based on date count
   const mode = (mfg && exp) ? "FULL" : "SINGLE";
 
   let codeOK = "—";
@@ -340,7 +353,6 @@ function validate(r) {
   let pass = true;
   let showCodeLine = false;
 
-  // ✅ Code validation (only if "With Code" selected)
   if (codeType === "WITH") {
     showCodeLine = true;
     if (!detectedCode || detectedCode === "NULL") {
@@ -353,11 +365,9 @@ function validate(r) {
       codeOK = "✅ OK";
     }
   } else {
-    // No Code mode — skip code check entirely
     codeOK = "Skipped";
   }
 
-  // ✅ Date validation (always)
   if (mode === "FULL") {
     if (!mfg) { formatOK = "❌ Invalid MFG"; pass = false; }
     else if (!exp) { formatOK = "❌ Invalid EXP"; pass = false; }
@@ -375,7 +385,6 @@ function validate(r) {
       shelfOK = "❌ Cannot check";
     }
   } else {
-    // SINGLE mode
     if (!mfg) {
       formatOK = "❌ Invalid date";
       pass = false;
@@ -386,9 +395,7 @@ function validate(r) {
   }
 
   showResult({
-    mode,
-    codeType,
-    showCodeLine,
+    mode, codeType, showCodeLine,
     code: detectedCode || "?",
     productName,
     mfg: mfg ? formatDate(mfg) : (r.MFG || "—"),
@@ -441,28 +448,15 @@ function showResult(r) {
     `<span class="mode-badge">${r.codeType === "WITH" ? "Code" : "No Code"}</span>`;
 
   let detailHTML = "";
-
   if (r.showCodeLine) {
     detailHTML += `<b>Code:</b> ${r.code} ${r.codeOK !== "✅ OK" ? "(" + r.codeOK + ")" : "✅"}<br>`;
   }
-
   detailHTML += `<b>Product:</b> ${r.productName}<br>`;
-
   if (r.mode === "FULL") {
-    detailHTML += `
-      <b>MFG:</b> ${r.mfg}<br>
-      <b>EXP:</b> ${r.exp}<br>
-      <b>Format:</b> ${r.formatOK}<br>
-      <b>Shelf:</b> ${r.shelfOK}<br>
-    `;
+    detailHTML += `<b>MFG:</b> ${r.mfg}<br><b>EXP:</b> ${r.exp}<br><b>Format:</b> ${r.formatOK}<br><b>Shelf:</b> ${r.shelfOK}<br>`;
   } else {
-    detailHTML += `
-      <b>Date:</b> ${r.mfg}<br>
-      <b>Format:</b> ${r.formatOK}<br>
-      <b>Shelf:</b> ${r.shelfOK}<br>
-    `;
+    detailHTML += `<b>Date:</b> ${r.mfg}<br><b>Format:</b> ${r.formatOK}<br><b>Shelf:</b> ${r.shelfOK}<br>`;
   }
-
   detailHTML += `<b>Checked:</b> ${formatDate(new Date())} ${new Date().toTimeString().slice(0,5)}`;
 
   document.getElementById("resultDetail").innerHTML = detailHTML;
